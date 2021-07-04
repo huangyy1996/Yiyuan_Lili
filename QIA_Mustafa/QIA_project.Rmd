@@ -1,0 +1,275 @@
+---
+title: "QIA Project"
+author: "Huang, Yiyuan"
+date: "October 12, 2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+### Note
+
+In this file, all the variables with suffix **_CAT** is the categorized continuous variables by the following ?ules:
+
+1)	Interpretation for estrogen (ER) / progesterone (PgR) testing:
+*	Samples with 1-100% of tumor nuclei positive for ER or PgR are interpreted as **positive**.
+*	A sample is considered **negative** for ER or PgR if <1% or 0%.
+
+2)	Interpretation for ?ER2 (IHC) TESTING IN BREAST CANCER:
+*	If the HER2 result is 3+, diagnosis is HER2 **positive**.
+*	If the HER2 result is 2+, diagnosis is HER2 **Equivocal**.
+*	If the HER2 result is 0 or 1+, diagnosis is HER2 **negative**.
+
+3) HER2D17Z1_RATIO_CAT: (-inf, 2]? (2, inf)
+
+4) HER2_COPYNUMBER: (-inf,4], (4,6], (6, inf)
+
+### Aim 1: 
+Summary statistics for Demographics features:
+Variables: AGE, DIAGNOSIS, ER_HUMAN, PgR_HUMAN, HER2_HUMAN. 
+
+```{r aim1, warning=FALSE, message=FALSE, echo=FALSE}
+library(dplyr)
+library(a?senal)
+#library(qwraps2)
+library(irr)
+library(psych)
+library(ggpubr)
+library(DescTools)
+library(multcompView)
+library(lsmeans)
+library(ggplot2)
+
+#options(qwraps2_markup = "markdown")
+#----------------------------READ DATA--------------------------
+QIA <- r?ad.csv("E:/research_lili/QIA/data/QIA project final-OCT-2020.csv", header = T)
+
+#-------------------------Aim 1-----------------------------
+#Aim 1: Summary statistics for Demographics features:
+#Variables: AGE, DIAGNOSIS, ER_HUMAN, PgR_HUMAN, HER2_HUMAN. ?#factorize DIAGNOSIS
+QIA$DIAGNOSIS <- as.factor(QIA$DIAGNOSIS)
+QIA$HER2_HUMAN <- as.factor(QIA$HER2_HUMAN)
+
+#Make summary table by package "arsenal"
+my_controls <- tableby.control(
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  cat.stats?= c("countpct", "Nmiss2"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (Q1, Q3)",
+    range = "Min - Max",
+    Nmiss2 = "Missing"
+  )
+)
+
+table1 <- tableby(~AGE+ ER_HUMAN+ PgR_HUMAN+ HER2_HUMAN+ DIAGNOSIS, data=QIA, control = m?_controls)
+summ <- summary(table1)
+
+#Dichotomize ER_HUMAN and PgR_HUMAN:
+#Negative if <1, otherwise positive
+ER_HUMAN_CAT <- as.factor(QIA$ER_HUMAN>=1)
+PgR_HUMAN_CAT <- as.factor(QIA$PgR_HUMAN>=1)
+QIA <- QIA %>% mutate(ER_HUMAN_CAT, PgR_HUMAN_CAT) 
+levels(?IA$ER_HUMAN_CAT) <- c("Negative", "Positive")
+levels(QIA$PgR_HUMAN_CAT) <- c("Negative", "Positive")
+
+#make summary table with "arsenal"
+my_controls2 <- tableby.control(
+  cat.stats = c("countpct", "Nmiss2")
+)
+table2 <- tableby(~ER_HUMAN_CAT + PgR_HUMAN_CA?, data = QIA, control = my_controls2)
+summ_dich <- summary(table2)
+
+```
+
+```{r table1, echo = F}
+knitr::kable(summ, format = "markdown", caption="Table 1: Summary statistics")
+```
+
+```{r table2, echo = F}
+knitr::kable(summ_dich, format = "markdown", captio? = "Table 2: Summary statistics of dichotomized ER_HUAMN and PgR_HUMAN")
+```
+
+### Aim 2:
+Correlation between the Human score of (ER_HUMAN, PgR_HUMAN, HER2_HUMAN) and the Digital image analysis score (ER_COREO, PgR_COREO, HER2_COREO). 
+
+```{r aim2_1, echo=F?LSE}
+#Aim 2: Correlation between the Human score of (ER_HUMAN, PgR_HUMAN, HER2_HUMAN) 
+#       and the Digital image analysis score (ER_COREO, PgR_COREO, HER2_COREO)
+
+#ER_HUMAN vs ER_COREO (both cont --- icc)
+corr_ER <- icc(QIA %>% select(ER_HUMAN, ER_CORE?), model = "twoway", type = "agreement", unit = "single")
+
+
+
+#PgR_HUMAN vs PgR_COREO (both cont --- icc)
+corr_PgR <- icc(QIA %>% select(PgR_HUMAN, PgR_COREO), model = "twoway", type = "agreement", unit = "single")
+
+
+#HER2_HUMAN vs HER2_COREO (both ordinal ?at --- stuart tau-c)
+QIA$HER2_COREO <- as.factor(QIA$HER2_COREO)
+#corr_HER2 <- StuartTauC(as.numeric(QIA$HER2_HUMAN), as.numeric(QIA$HER2_COREO), conf.level = 0.95)
+#KAPPA_1 <- cohen.kappa(QIA %>% select(HER2_COREO, HER2_HUMAN))
+
+QIA$HER2_COREO_CAT <- cut(?s.numeric(QIA$HER2_COREO)-1, breaks = c(-1,1.5,2.5,3.5),
+                          labels = c("Negative", "Equivocal", "Positive"))
+QIA$HER2_HUMAN_CAT <- cut(as.numeric(QIA$HER2_HUMAN)-1, breaks = c(-1,1.5,2.5,3.5),
+                          labels = c("Ne?ative", "Equivocal", "Positive"))
+#corr_HER2_new <- StuartTauC(as.numeric(QIA$HER2_HUMAN_CAT), as.numeric(QIA$HER2_COREO_CAT), conf.level = 0.95)
+
+KAPPA_2 <- cohen.kappa(QIA %>% select(HER2_COREO_CAT, HER2_HUMAN_CAT))
+```
+
+* ER_HUMAN vs ER_COREO (both cont?nuous --- interclass correlation coefficient(ICC))
+
+The concordance between ER_HUMAN and ER_COREO is **`r round(corr_ER$value, 2)`**(p=`r round(corr_ER$p.value,2)`) with corresponding 95% Confidence Interval (`r round(corr_ER$lbound,2)`, `r round(corr_ER$u?ound,2)`).
+
+The scatter plot is shown below
+
+```{r p1, echo=F, out.width="80%", fig.align="center"}
+ggplot(QIA, aes(x=ER_HUMAN, y=ER_COREO)) + 
+  geom_point() +
+  ylab("Estrogen receptor digital image analysis score") +
+  xlab("Estrogen receptor pathologis?s' score")
+```
+
+* PgR_HUMAN vs PgR_COREO (both continous --- ICC)
+
+The concordance between PgR_HUMAN and PgR_COREO is **`r round(corr_PgR$value,2)`**(p=`r round(corr_PgR$p.value,2)`) with corresponding 95% Confidence Interval (`r round(corr_PgR$lbound,2)`,?`r round(corr_PgR$ubound,2)`).
+
+The scatter plot is shown below
+
+```{r p2, echo=F, out.width="80%", fig.align="center"}
+p2 <- ggplot(QIA, aes(x=PgR_HUMAN, y=PgR_COREO)) + 
+  geom_point() +
+  ylab("Progesteron receptor digital image analysis score") +
+  xla?("Progesteron receptor pathologists' score")
+```
+
+* HER2_HUMAN vs HER2_COREO (both categorical --- KAPPA / weighted KAPPA)
+
+The concordance between HER2_HUMAN_CAT and HER2_COREO_CAT is **`r round(KAPPA_2$kappa,2)`** (Kappa) or **`r round(KAPPA_2$weighted.k?ppa,2)`** (Weighted Kappa). 
+
+The contingency table is your **Table 3**.
+
+
+### Aim 3
+
+```{r aim3, echo=FALSE}
+#Aim 3A: Correlation between HER2_COREO (Negative, equivocal and Positive) 
+#        and the HER2_FISH (Negative and Positive). 
+QIA$HER2_FISH[whi?h(QIA$HER2_FISH=="")] = NA
+QIA_3 <- QIA %>%
+  filter(!is.na(HER2_FISH))
+QIA$HER2_FISH <- as.factor(QIA$HER2_FISH)
+#QIA$HER2_COREO_CAT <- cut(as.numeric(QIA$HER2_COREO), breaks = c(0,1.5,2.5,3.5),
+#                         labels = c("Negative", "Equivocal"? "Positive"))
+
+#table(QIA$HER2_FISH, QIA$HER2_COREO_CAT)
+
+
+#corr_COREO_FISH <- cohen.kappa(QIA %>% select(HER2_COREO_CAT, HER2_FISH))
+#corr_3a <- StuartTauC(as.numeric(QIA$HER2_FISH), as.numeric(QIA$HER2_COREO_CAT), conf.level = 0.95)
+
+
+#Aim 3B: Correlatio? between HER2_COREO (cat) and HER2D17Z1_RATIO (cont).---ANOVA
+
+#type III anova 
+fit_3b <- lm(HER2D17Z1_RATIO ~ HER2_COREO_CAT,  data = QIA %>% filter(HER2_COREO_CAT!="Negative"))
+#summary(fit_3b)
+p_3b <- anova(fit_3b)[1,5] #p-value for F-test
+
+#Aim 3C: Cor?elation between HER2_COREO (cat) and HER2_COPYNUMBER (cont). ---ANOVA
+
+fit_3c <- lm(HER2_COPYNUMBER ~ HER2_COREO_CAT, data = QIA %>% filter(HER2_COREO_CAT!="Negative"))
+p_3c <- anova(fit_3c)[1,5] #p-value for F-test
+
+#Aim 3D: Correlation between DIAGNOSIS ?CAT) 
+#        and HER2_FISH (CAT)/ASCOCAP_Giudline_Groups (CAT).
+#QIA$ASCOCAP_Giudline_Groups[which(QIA$ASCOCAP_Giudline_Groups == "")] = NA
+#QIA$ASCOCAP_Giudline_Groups <- as.factor(QIA$ASCOCAP_Giudline_Groups)
+
+#corr_DIAG_FISH <- cohen.kappa(QIA %>% sel?ct(DIAGNOSIS, HER2_FISH))
+#corr_DIAG_ASCO <- cohen.kappa(QIA %>% select(DIAGNOSIS, ASCOCAP_Giudline_Groups))
+```
+
+#### Aim 3A
+HER2_COREO_CAT (Negative, equivocal and Positive) vs HER2_FISH (show contingency table and Fisher's exact test)
+
+* Contingency tab?e
+
+```{r aim3_table, echo=F}
+t1 <- table(QIA_3 %>% select(HER2_COREO_CAT, HER2_FISH))
+t1
+```
+
+* Fisher's exact test (to test if two categorical variables are significantly correlated **in a small-sample case**)
+
+```{r test1, echo=F}
+fisher.test(t1)
+```
+
+Th? result shows that p-value = 0.3183 > 0.05, which means there is no evidence to show that they are significantly correlated.
+
+#### Aim 3B
+Correlation between HER2_COREO and HER2D17Z1_RATIO_CAT (both categorical with small sample size --- Fisher's exact tes?)
+
+```{r 3b, echo=F, warning=F}
+QIA$HER2D17Z1_RATIO_CAT <- cut(QIA$HER2D17Z1_RATIO, breaks = c(-Inf, 2, Inf))
+t2 <- table(QIA %>% select(HER2D17Z1_RATIO_CAT, HER2_COREO_CAT))
+t2
+fisher.test(t2)
+```
+
+The result shows that p-value = 0.2734 > 0.05, which mean? there is no evidence to show that they are significantly correlated.
+
+#### Aim 3C
+Correlation between HER2_COREO and HER2_COPYNUMBER (both categorical with small sample size --- Fisher's exact test)
+
+```{r 3c, echo=F, warning=F}
+QIA$HER2_COPYNUMBER_CAT <-?cut(QIA$HER2_COPYNUMBER, breaks = c(-Inf, 4, 6, Inf))
+t3 <- table(QIA %>% select(HER2_COPYNUMBER_CAT, HER2_COREO_CAT))
+t3
+fisher.test(t3)
+```
+
+The result shows that p-value = 0.1281 > 0.05, which means there is no evidence to show that they are significant?y correlated.
+
+### Aim 4
+```{r aim4, echo=FALSE}
+#Aim 4A: Discordant between the Human score of (ER_HUMAN, PgR_HUMAN, HER2_HUMAN) 
+#and the Digital image analysis score (ER_COREO, PgR_COREO, HER2_COREO). 
+
+#SAME AS BEFORE: CATEGORIZE COREO SCORES
+ER_COREO_?AT = as.factor(QIA$ER_COREO>=0.01)
+PgR_COREO_CAT = as.factor(QIA$PgR_COREO>=0.01)
+QIA <- QIA %>% mutate(ER_COREO_CAT, PgR_COREO_CAT) 
+levels(QIA$ER_COREO_CAT) <- c("Negative", "Positive")
+levels(QIA$PgR_COREO_CAT) <- c("Negative", "Positive")
+
+#corr_ER_CAT?<- StuartTauC(as.numeric(QIA$ER_HUMAN_CAT), as.numeric(QIA$ER_COREO_CAT), conf.level = 0.95)
+#corr_PgR_CAT <- StuartTauC(as.numeric(QIA$PgR_HUMAN_CAT), as.numeric(QIA$PgR_COREO_CAT), conf.level = 0.95) 
+corr_ER_CAT <- cohen.kappa(QIA %>% select(ER_HUMAN_CA?, ER_COREO_CAT))
+corr_PgR_CAT <- cohen.kappa(QIA %>% select(PgR_HUMAN_CAT, PgR_COREO_CAT))
+```
+
+#### Aim 4A 
+Discordance between the Human score of (ER_HUMAN, PgR_HUMAN, HER2_HUMAN) and the Digital image analysis score (ER_COREO, PgR_COREO, HER2_COREO). 
+
+? ER_HUMAN_CAT vs ER_COREO_CAT (both categorical --- weighted KAPPA)
+
+The concordance between ER_HUMAN_CAT and ER_COREO_CAT is **`r round(corr_ER_CAT$kappa,2)`** (Kappa) or **`r round(corr_ER_CAT$weighted.kappa,2)`** (weighted Kappa). 
+
+The contingency tabl? is your **Table 1**.
+
+* PgR_HUMAN_CAT vs PgR_COREO_CAT (both categorical --- weighted KAPPA)
+
+The concordance between PgR_HUMAN_CAT and PgR_COREO_CAT is **`r round(corr_PgR_CAT$kappa,2)`** (Kappa) or **`r round(corr_PgR_CAT$weighted.kappa,2)`** (weighted ?appa). 
+
+The contingency table is your **Table 2**.
+
+* HER2_HUMAN VS HER2_COREO: the same as Aim 2.
+
+#### Aim 4B 
+Discordance between HER2_COREO and HER2_FISH: the same as 3A.
+

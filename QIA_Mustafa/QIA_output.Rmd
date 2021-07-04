@@ -1,0 +1,23 @@
+---
+title: 'QIA project: Output'
+author: "Huang, Yiyuan"
+date: "October 5, 2020"
+output: html_document
+---
+
+## Aim 1: 
+Summary statistics for Demographics features:
+Variables: AGE, DIAGNOSIS, ER_HUMAN, PgR_HUMAN, HER2_HUMAN. 
+
+```{r aim1, warning=FALSE, message=FALSE}
+library(dplyr)
+#----------------------------READ DATA--------------------------
+QIA <- read.csv("E:/research_lili/QIA/QIA project final-OCT-2020.csv", header = T)
+
+#-------------------------Aim 1-----------------------------
+#Aim 1: Summary statistics for Demographics features:
+#Variables: AGE, DIAGNOSIS, ER_HUMAN, PgR_HUMAN, HER2_HUMAN. 
+QIA$DIAGNOSIS <- as.factor(QIA$DIAGNOSIS)
+df_summary <- QIA %>% select(AGE, DIAGNOSIS, ER_HUMAN, PgR_HUMAN, HER2_HUMAN)
+summary(df_summary)
+```
